@@ -5,14 +5,14 @@ from datetime import datetime, time, timedelta
 from pymongo import MongoClient
 
 client = MongoClient("127.0.0.1:27017")
-db = client.API
+db = client.lifehack
 
 router = APIRouter(
-        prefix="/items",
-        tags=["items"]
+        prefix="/users",
+        tags=["users"]
         )
 
-@app.get("/createUser")
+@router.post("/createUser")
 def createUser(
         username: Union[str, None] = None,
         password: Union[str, None] = None,
@@ -34,7 +34,7 @@ def createUser(
         })
     return {"id": str(usr.inserted_id)}
 
-@app.get("/login")
+@router.post("/login")
 def login(
         username: Union[str, None] = None,
         password: Union[str, None] = None):
@@ -50,3 +50,60 @@ def login(
         return {"id": str(usr["_id"])}
     else:
         return {"Error": "Either username or password is incorrect"}
+
+@router.get("/getUserById")
+def getUserById(id: Union[str, None] = None):
+    usr = db.users.find_one(
+    {
+        "_id" : ObjectId(id)
+    }
+    )
+    if usr:
+        return {"username": usr["username"], "location": usr["location"]}
+    else:
+        return {"Error": "Problem retrieving user"}
+
+@router.put("/updateUser")
+def updateUser(
+        username: Union[str, None] = None,
+        password: Union[str, None] = None,
+        location: Union[str, None] = None,
+        id: Union[str, None] = None):
+    usr = db.users.find_one({
+        "_id": ObjectId(id)
+        })
+    if usr:
+        if username:
+            updated = db.users.update_one({"_id": ObjectId(id)}, 
+            {"$set":
+                {"username": username}
+            })
+        if password:
+            updated = db.users.update_one({"_id": ObjectId(id)}, 
+            {"$set":
+                {"password": password} 
+            })
+        if location:
+            updated = db.users.update_one({"_id": ObjectId(id)}, 
+            {"$set":
+                {"location": location} 
+            })
+
+        if updated.modified_count > 0 :
+            return {"status":"success"}
+        else:
+            return {"Error": "Error updating user -- fields may have not changed"}
+    else:
+        return {"Error": "Error retrieving user, id may be incorrect"}
+
+@router.delete('/deleteUser')
+def deleteUser(
+    id: Union[str, None] = None
+):
+    status = db.users.delete_one({"_id":ObjectId(id)})
+    if status.deleted_count == 1:
+        return {"status": "success", "message": "delete success"}
+    else:
+        return {"Error": "delete fail"}
+    
+
