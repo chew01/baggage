@@ -3,6 +3,7 @@ from typing import Union
 from bson.objectid import ObjectId
 from datetime import datetime, time, timedelta
 from pymongo import MongoClient
+from geopy import Nominatim
 
 
 router = APIRouter(
@@ -15,7 +16,7 @@ db = client.API
 
 geolocator = Nominatim(user_agent="baggage-backend")
 
-@router.get("/create")
+@router.post("/create")
 def user_create(
         username: Union[str, None] = None,
         password: Union[str, None] = None,
