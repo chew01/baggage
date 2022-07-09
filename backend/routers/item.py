@@ -106,7 +106,7 @@ def item_list(
             ret += [f(j,i) for j in db.items.find({"user_id":str(i["_id"]),"accepted":""},limit=limit-len(ret))]
         return ret
     if sort == "expiry":
-        usrs = {str(i["_id"]):{"address": i["address"]} for i in db.users.find({})}
+        usrs = {str(i["_id"]):i for i in db.users.find({})}
         return [f(i,usrs[i["user_id"]]) for i in db.items.find({},limit=limit).sort([("expiry", ASCENDING)])]
     if sort == "none":
         usrs = {str(i["_id"]):i for i in db.users.find({})}
