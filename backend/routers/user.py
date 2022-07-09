@@ -71,6 +71,7 @@ def getUserById(id: Union[str, None] = None):
     }
     )
     if usr:
+        usr['_id'] = str(usr['_id'])
         return usr
     else:
         return {"Error": "Problem retrieving user"}
@@ -79,7 +80,8 @@ def getUserById(id: Union[str, None] = None):
 def updateUser(
         username: Union[str, None] = None,
         password: Union[str, None] = None,
-        location: Union[str, None] = None,
+        postal_code: Union[int, None] = None,
+        unit_number: Union[str, None] = None,
         id: Union[str, None] = None):
     usr = db.users.find_one({
         "_id": ObjectId(id)
@@ -95,10 +97,16 @@ def updateUser(
             {"$set":
                 {"password": password} 
             })
-        if location:
+        if postal_code:
             updated = db.users.update_one({"_id": ObjectId(id)}, 
             {"$set":
-                {"location": location} 
+                {"postal_code": postal_code} 
+            })
+        
+        if unit_number:
+            updated = db.users.update_one({"_id": ObjectId(id)}, 
+            {"$set":
+                {"unit_number": unit_number} 
             })
 
         if updated.modified_count > 0 :
