@@ -1,19 +1,15 @@
-from typing import Union
-from fastapi import FastAPI
-from bson.objectid import ObjectId
-from datetime import datetime, time, timedelta
-from pymongo import MongoClient
-from routers import items, users
-
-client = MongoClient("127.0.0.1:27017")
-db = client.API
+from fastapi import FastAPI, HTTPException
+from .routers import item, user
 
 app = FastAPI()
 
-app.include_router(items.router)
-app.include_router(users.router)
+app.include_router(item.router)
+app.include_router(user.router)
 
 @app.get("/")
 def ping():
     return {"Hello": "World"}
 
+@app.get("/win")
+def win():
+    raise HTTPException(status_code=501, detail="NotImplementedError")

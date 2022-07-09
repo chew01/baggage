@@ -4,38 +4,49 @@ from bson.objectid import ObjectId
 from datetime import datetime, time, timedelta
 from pymongo import MongoClient
 
-client = MongoClient("127.0.0.1:27017")
-db = client.lifehack
 
 router = APIRouter(
-        prefix="/users",
-        tags=["users"]
+        prefix="/user",
+        tags=["user"]
         )
 
-@router.post("/createUser")
-def createUser(
+client = MongoClient("127.0.0.1:27017")
+db = client.API
+
+geolocator = Nominatim(user_agent="baggage-backend")
+
+@router.get("/create")
+def user_create(
         username: Union[str, None] = None,
         password: Union[str, None] = None,
-        location: Union[int, None] = None):
+        postal_code: Union[int, None] = None,
+        unit_number: Union[str, None] = None):
     if username == None:
         return {"Error": "username is invalid"}
     if password == None:
         return {"Error": "password is invalid"}
-    if location == None:
-        return {"Error": "location is invalid"}
+    if postal_code == None:
+        return {"Error": "postal_code is invalid"}
+    if unit_number == None:
+        return {"Error": "unit_number is invalid"}
     if db.users.find_one({
         "username": username
         }):
         return {"Error": "User already exists"}
+    location = geolocator.geocode({"country":"Singapore","postalcode":postal_code})
+    if not location:
+        return {"Error": "Cannot find location"}
     usr = db.users.insert_one({
         "username": username,
         "password": password,
-        "location": location,
+        "address": location.address,
+        "unit_number": unit_number,
+        "point": list(location.point)[:2]
         })
     return {"id": str(usr.inserted_id)}
 
-@router.post("/login")
-def login(
+@router.get("/login")
+def user_login(
         username: Union[str, None] = None,
         password: Union[str, None] = None):
     if username == None:
@@ -59,7 +70,7 @@ def getUserById(id: Union[str, None] = None):
     }
     )
     if usr:
-        return {"username": usr["username"], "location": usr["location"]}
+        return usr
     else:
         return {"Error": "Problem retrieving user"}
 
