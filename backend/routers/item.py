@@ -62,7 +62,8 @@ def item_list(
         item_id: Union[str, None] = None,
         limit: Union[int, None] = 10
         ):
-    t = datetime.now()
+    if limit<=0:
+        raise HTTPException(status_code=400, detail="limit is invalid")
     res = []
     f = lambda i,u: {
             "item_id":str(i["_id"]),
@@ -140,6 +141,11 @@ def item_accept(
         "_id": ObjectId(user_id)
         }):
         raise HTTPException(status_code=400, detail="user_id is invalid")
+    item = db.users.find_one({
+        "_id": ObjectId(item_id)
+        })
+    if item["user_id"] == user_id:
+        raise HTTPException(status_code=400, detail="Cannot accept own item")
     return db.items.update_one({
         "_id": ObjectId(item_id),
         "accepted":""
