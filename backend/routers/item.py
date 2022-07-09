@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from typing import Union, List, Literal
+from typing import Union, List, Literal, Optional
 from pydantic import BaseModel
 from bson.objectid import ObjectId
 from datetime import datetime, time, timedelta
@@ -41,16 +41,19 @@ def item_add(
         "user_id": user_id,
         "name": name,
         "expiry": datetime.fromtimestamp(expiry),
-        "quantity": quantity
+        "quantity": quantity,
+        "accepted": ""
         })
     return {"item_id": str(item.inserted_id)}
 
 class item_list_ret(BaseModel):
     item_id: str
-    name: str
+    item_name: str
     expiry: int
+    user_name: str
     address: str
     unit_number: str
+    accepted: str
 
 @router.get("/list", response_model=List[item_list_ret])
 def item_list( 
@@ -63,10 +66,12 @@ def item_list(
     res = []
     f = lambda i,u: {
             "item_id":str(i["_id"]),
-            "name":i["name"],
+            "item_name":i["name"],
             "expiry":i["expiry"].timestamp(),
+            "user_name": u["username"],
             "address": u["address"],
-            "unit_number": u["unit_number"]
+            "unit_number": u["unit_number"],
+            "accepted": i["accepted"]
             }
     if sort == "id":
         if item_id == None or not ObjectId.is_valid(item_id):
@@ -98,14 +103,14 @@ def item_list(
         ret = []
         for i in usrs[1:]:
             if len(ret)>=limit: break
-            ret += [f(j,i) for j in db.items.find({"user_id":str(i["_id"])},limit=limit-len(ret))]
+            ret += [f(j,i) for j in db.items.find({"user_id":str(i["_id"]),"accepted":""},limit=limit-len(ret))]
         return ret
     if sort == "expiry":
         usrs = {str(i["_id"]):{"address": i["address"]} for i in db.users.find({})}
         return [f(i,usrs[i["user_id"]]) for i in db.items.find({},limit=limit).sort([("expiry", ASCENDING)])]
     if sort == "none":
         usrs = {str(i["_id"]):i for i in db.users.find({})}
-        return [f(i,usrs[i["user_id"]]) for i in db.items.find({},limit=limit)]
+        return [f(i,usrs[i["user_id"]]) for i in db.items.find({"accepted":""},limit=limit)]
     raise HTTPException(status_code=400, detail="Unknown sort")
 
 @router.get("/delete", response_model=bool)
@@ -131,19 +136,16 @@ def item_accept(
         raise HTTPException(status_code=400, detail="user_id is invalid")
     if item_id == None or not ObjectId.is_valid(item_id):
         raise HTTPException(status_code=400, detail="item_id is invalid")
-    usr = db.users.find_one({
-        "_id": ObjectId("user_id")
-        })
-    if not usr:
-        raise HTTPException(status_code=400, detail="usr_id is invalid")
-    item = db.items.find_one({
-        "_id": ObjectId(item_id)
-        })
-    if not item:
-        raise HTTPException(status_code=400, detail="item_id is invalid")
-    raise HTTPException(status_code=501, detail="NotImplementedError")
+    if not db.users.find_one({
+        "_id": ObjectId(user_id)
+        }):
+        raise HTTPException(status_code=400, detail="user_id is invalid")
+    return db.items.update_one({
+        "_id": ObjectId(item_id),
+        "accepted":""
+        },{"$set":{"accepted":user_id}}).matched_count
 
-@router.get("/removeListingAccept", response_model=bool)
+@router.get("/removeAccept", response_model=bool)
 def item_unaccept(
         user_id: Union[str, None] = None,
         item_id: Union[str, None] = None
@@ -152,14 +154,11 @@ def item_unaccept(
         raise HTTPException(status_code=400, detail="user_id is invalid")
     if item_id == None or not ObjectId.is_valid(item_id):
         raise HTTPException(status_code=400, detail="item_id is invalid")
-    usr = db.users.find_one({
-        "_id": ObjectId("user_id")
-        })
-    if not usr:
-        raise HTTPException(status_code=400, detail="usr_id is invalid")
-    item = db.items.find_one({
-        "_id": ObjectId(item_id)
-        })
-    if not item:
-        raise HTTPException(status_code=400, detail="item_id is invalid")
-    raise HTTPException(status_code=501, detail="NotImplementedError")
+    if not db.users.find_one({
+        "_id": ObjectId(user_id)
+        }):
+        raise HTTPException(status_code=400, detail="user_id is invalid")
+    return db.items.update_one({
+        "_id": ObjectId(item_id),
+        "accepted":user_id
+        },{"$set":{"accepted":""}}).matched_count
