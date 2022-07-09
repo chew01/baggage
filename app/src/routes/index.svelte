@@ -1,6 +1,8 @@
 <script>
+import Hero from "$lib/Hero.svelte";
 
 </script>
 
-<a href="dashboard">Dashboard</a>
-<a href="Login">Login</a>
+<main>
+    <Hero />
+</main>
