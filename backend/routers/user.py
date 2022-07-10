@@ -3,8 +3,8 @@ from typing import Union
 from bson.objectid import ObjectId
 from datetime import datetime, time, timedelta
 from pymongo import MongoClient
-from geopy import Nominatim
-
+from geopy import GoogleV3
+import os
 
 router = APIRouter(
         prefix="/user",
@@ -14,7 +14,7 @@ router = APIRouter(
 client = MongoClient("127.0.0.1:27017")
 db = client.API
 
-geolocator = Nominatim(user_agent="baggage-backend")
+geolocator = GoogleV3(api_key=os.environ['API_KEY'],domain="maps.google.com.sg")
 
 @router.post("/create")
 def user_create(
@@ -23,20 +23,20 @@ def user_create(
         postal_code: Union[int, None] = None,
         unit_number: Union[str, None] = None):
     if username == None:
-        return {"Error": "username is invalid"}
+        raise HTTPException(status_code=400, detail="username is invalid")
     if password == None:
-        return {"Error": "password is invalid"}
+        raise HTTPException(status_code=400, detail="password is invalid")
     if postal_code == None:
-        return {"Error": "postal_code is invalid"}
+        raise HTTPException(status_code=400, detail="postal_code is invalid")
     if unit_number == None:
-        return {"Error": "unit_number is invalid"}
+        raise HTTPException(status_code=400, detail="unit_number is invalid")
     if db.users.find_one({
         "username": username
         }):
-        return {"Error": "User already exists"}
+        raise HTTPException(status_code=400, detail="User already exists")
     location = geolocator.geocode({"country":"Singapore","postalcode":postal_code})
     if not location:
-        return {"Error": "Cannot find location"}
+        raise HTTPException(status_code=400, detail="Cannot find location")
     usr = db.users.insert_one({
         "username": username,
         "password": password,
@@ -51,9 +51,9 @@ def user_login(
         username: Union[str, None] = None,
         password: Union[str, None] = None):
     if username == None:
-        return {"Error": "username is invalid"}
+        raise HTTPException(status_code=400, detail="username is invalid")
     if password == None:
-        return {"Error": "password is invalid"}
+        raise HTTPException(status_code=400, detail="password is invalid")
     usr = db.users.find_one({
         "username": username,
         "password": password,
@@ -61,7 +61,7 @@ def user_login(
     if usr:
         return {"id": str(usr["_id"])}
     else:
-        return {"Error": "Either username or password is incorrect"}
+        raise HTTPException(status_code=400, detail="Either username or password is incorrect")
 
 @router.get("/getUserById")
 def getUserById(id: Union[str, None] = None):
@@ -74,7 +74,7 @@ def getUserById(id: Union[str, None] = None):
         usr['_id'] = str(usr['_id'])
         return usr
     else:
-        return {"Error": "Problem retrieving user"}
+        raise HTTPException(status_code=400, detail="Problem retrieving user")
 
 @router.put("/updateUser")
 def updateUser(
@@ -98,11 +98,13 @@ def updateUser(
                 {"password": password} 
             })
         if postal_code:
+            location = geolocator.geocode({"country":"Singapore","postalcode":postal_code})
+            if not location:
+                raise HTTPException(status_code=400, detail="Cannot find location")
             updated = db.users.update_one({"_id": ObjectId(id)}, 
             {"$set":
-                {"postal_code": postal_code} 
+                {"point": list(location.point)[:2]}
             })
-        
         if unit_number:
             updated = db.users.update_one({"_id": ObjectId(id)}, 
             {"$set":
@@ -112,9 +114,9 @@ def updateUser(
         if updated.modified_count > 0 :
             return {"status":"success"}
         else:
-            return {"Error": "Error updating user -- fields may have not changed"}
+            raise HTTPException(status_code=400, detail="Error updating user -- fields may have not changed")
     else:
-        return {"Error": "Error retrieving user, id may be incorrect"}
+        raise HTTPException(status_code=400, detail="Error retrieving user, id may be incorrect")
 
 @router.delete('/deleteUser')
 def deleteUser(
@@ -124,6 +126,6 @@ def deleteUser(
     if status.deleted_count == 1:
         return {"status": "success", "message": "delete success"}
     else:
-        return {"Error": "delete fail"}
+        raise HTTPException(status_code=400, detail="delete fail")
     
 
