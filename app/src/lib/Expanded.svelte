@@ -49,7 +49,7 @@
         <div class="icon">
             <FaCalendarTimes/>
         </div>
-        <p class="font-medium">Expires on {expiry}</p>
+        <p class="font-medium">Expires on {new Date(expiry * 1000).toDateString()}</p>
     </div>
     {#if accepted === ""}
         <button on:click={accept} class="bg-white rounded-xl p-4 font-medium text-lg">Reserve deal</button>

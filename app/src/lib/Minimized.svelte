@@ -29,6 +29,6 @@
         <div class="icon">
             <FaCalendarTimes/>
         </div>
-        <p class="font-medium">Expires on {expiry}</p>
+        <p class="font-medium">Expires on {new Date(expiry * 1000).toDateString()}</p>
     </div>
 </article>
