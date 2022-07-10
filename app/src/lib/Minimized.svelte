@@ -16,15 +16,19 @@
 </style>
 
 <article class="m-4 p-6 bg-gray-200 rounded-xl flex flex-col gap-2 shadow-xl sm:w-[400px] sm:h-[500px]">
-    <h3 class="text-2xl font-bold">{title}</h3>
-    <img src={imageSrc} alt="" class="my-2 rounded-lg shadow-xl max-h-72 max-w-72 object-cover" />
+    <h2 class="text-2xl font-bold">{title}</h2>
+    <img src={imageSrc} alt="" class="my-2 rounded-lg shadow-xl max-h-72 max-w-72 object-cover"/>
     <p class="italic font-medium">{description}</p>
     <div class="flex gap-2">
-        <div class="icon"><FaMapMarkedAlt/></div>
+        <div class="icon">
+            <FaMapMarkedAlt/>
+        </div>
         <p class="font-medium">{address}</p>
     </div>
     <div class="flex gap-2">
-        <div class="icon"><FaCalendarTimes/></div>
+        <div class="icon">
+            <FaCalendarTimes/>
+        </div>
         <p class="font-medium">Expires on {expiry}</p>
     </div>
 </article>
