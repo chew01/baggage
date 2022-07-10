@@ -1,10 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from typing import Union
 from bson.objectid import ObjectId
 from datetime import datetime, time, timedelta
 from pymongo import MongoClient
-from geopy import Nominatim
-
+from geopy import GoogleV3
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+import random
+import os
 
 router = APIRouter(
         prefix="/user",
@@ -14,7 +17,30 @@ router = APIRouter(
 client = MongoClient("127.0.0.1:27017")
 db = client.API
 
-geolocator = Nominatim(user_agent="baggage-backend")
+geolocator = GoogleV3(api_key=os.environ['API_KEY'],domain="maps.google.com.sg")
+
+SECRET_KEY = os.environ['SECRET_KEY']
+ALGORITHM = "HS256"
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def create_access_token(user: str, expires_delta: timedelta | None = None):
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=1440)
+    to_encode = {"user": user, "exp": expire}
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_access_token(token: str):
+    try:
+        data = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except:
+        raise HTTPException(status_code=400, detail="Invalid JWT token")
+    if data["exp"] < datetime.utcnow().timestamp():
+        raise HTTPException(status_code=400, detail="JWT token expired")
+    return data["user"]
 
 @router.post("/create")
 def user_create(
@@ -23,58 +49,55 @@ def user_create(
         postal_code: Union[int, None] = None,
         unit_number: Union[str, None] = None):
     if username == None:
-        return {"Error": "username is invalid"}
+        raise HTTPException(status_code=400, detail="username is invalid")
     if password == None:
-        return {"Error": "password is invalid"}
+        raise HTTPException(status_code=400, detail="password is invalid")
     if postal_code == None:
-        return {"Error": "postal_code is invalid"}
+        raise HTTPException(status_code=400, detail="postal_code is invalid")
     if unit_number == None:
-        return {"Error": "unit_number is invalid"}
+        raise HTTPException(status_code=400, detail="unit_number is invalid")
     if db.users.find_one({
         "username": username
         }):
-        return {"Error": "User already exists"}
+        raise HTTPException(status_code=400, detail="User already exists")
     location = geolocator.geocode({"country":"Singapore","postalcode":postal_code})
-    if not location:
-        return {"Error": "Cannot find location"}
+    if not location or location.address=="Singapore":
+        raise HTTPException(status_code=400, detail="Cannot find location")
     usr = db.users.insert_one({
+        "_id": ObjectId(hex(random.randint(0,16**24-1))[2:]),
         "username": username,
-        "password": password,
+        "password": pwd_context.hash(password),
         "address": location.address,
         "unit_number": unit_number,
         "point": list(location.point)[:2]
         })
-    return {"id": str(usr.inserted_id)}
+    return {"token": create_access_token(username)}
 
 @router.get("/login")
 def user_login(
         username: Union[str, None] = None,
         password: Union[str, None] = None):
     if username == None:
-        return {"Error": "username is invalid"}
+        raise HTTPException(status_code=400, detail="username is invalid")
     if password == None:
-        return {"Error": "password is invalid"}
+        raise HTTPException(status_code=400, detail="password is invalid")
     usr = db.users.find_one({
         "username": username,
-        "password": password,
         })
-    if usr:
-        return {"id": str(usr["_id"])}
+    if usr and pwd_context.verify(password,usr["password"]):
+        return {"token": create_access_token(username)}
     else:
-        return {"Error": "Either username or password is incorrect"}
+        raise HTTPException(status_code=400, detail="Either username or password is incorrect")
 
-@router.get("/getUserById")
-def getUserById(id: Union[str, None] = None):
-    usr = db.users.find_one(
-    {
-        "_id" : ObjectId(id)
-    }
-    )
-    if usr:
-        usr['_id'] = str(usr['_id'])
-        return usr
-    else:
-        return {"Error": "Problem retrieving user"}
+@router.put("/getUserById")
+def getUserById(
+        user_id: Union[str, None] = None):
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    usr = db.users.find_one({"_id": ObjectId(user_id)})
+    del usr["password"]
+    usr["_id"] = str(usr["_id"])
+    return usr
 
 @router.put("/updateUser")
 def updateUser(
@@ -82,29 +105,31 @@ def updateUser(
         password: Union[str, None] = None,
         postal_code: Union[int, None] = None,
         unit_number: Union[str, None] = None,
-        id: Union[str, None] = None):
-    usr = db.users.find_one({
-        "_id": ObjectId(id)
-        })
-    if usr:
+        token: Union[str, None] = None):
+    user = verify_access_token(token)
+    if user:
         if username:
-            updated = db.users.update_one({"_id": ObjectId(id)}, 
+            if db.users.find_one({"username": username}):
+                raise HTTPException(status_code=400, detail="Username already exsits")
+            updated = db.users.update_one({"username":user},
             {"$set":
                 {"username": username}
             })
         if password:
-            updated = db.users.update_one({"_id": ObjectId(id)}, 
+            updated = db.users.update_one({"username":user}, 
             {"$set":
                 {"password": password} 
             })
         if postal_code:
-            updated = db.users.update_one({"_id": ObjectId(id)}, 
+            location = geolocator.geocode({"country":"Singapore","postalcode":postal_code})
+            if not location or location.address=="Singapore":
+                raise HTTPException(status_code=400, detail="Cannot find location")
+            updated = db.users.update_one({"username": user}, 
             {"$set":
-                {"postal_code": postal_code} 
+                {"point": list(location.point)[:2]}
             })
-        
         if unit_number:
-            updated = db.users.update_one({"_id": ObjectId(id)}, 
+            updated = db.users.update_one({"username": user}, 
             {"$set":
                 {"unit_number": unit_number} 
             })
@@ -112,18 +137,25 @@ def updateUser(
         if updated.modified_count > 0 :
             return {"status":"success"}
         else:
-            return {"Error": "Error updating user -- fields may have not changed"}
+            raise HTTPException(status_code=400, detail="Error updating user -- fields may have not changed")
     else:
-        return {"Error": "Error retrieving user, id may be incorrect"}
+        raise HTTPException(status_code=400, detail="Error retrieving user, user_id may be incorrect")
 
 @router.delete('/deleteUser')
 def deleteUser(
-    id: Union[str, None] = None
+    token: Union[str, None] = None
 ):
-    status = db.users.delete_one({"_id":ObjectId(id)})
+    user = verify_access_token(token)
+    usr = db.users.find_one({"username": user})
+    if not usr:
+        raise HTTPException(status_code=400, detail="Cannot find user")
+    user_id = str(usr["_id"])
+    status = db.users.delete_one({"username": user})
     if status.deleted_count == 1:
+        db.items.delete_many({"user_id":user_id})
+        db.items.update_many({"accepted":user_id},{"$set":{"accepted":""}})
         return {"status": "success", "message": "delete success"}
     else:
-        return {"Error": "delete fail"}
+        raise HTTPException(status_code=400, detail="delete fail")
     
 
