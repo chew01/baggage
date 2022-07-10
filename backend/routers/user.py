@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from typing import Union
 from bson.objectid import ObjectId
 from datetime import datetime, time, timedelta
@@ -35,7 +35,7 @@ def user_create(
         }):
         raise HTTPException(status_code=400, detail="User already exists")
     location = geolocator.geocode({"country":"Singapore","postalcode":postal_code})
-    if not location:
+    if not location or location.address=="Singapore":
         raise HTTPException(status_code=400, detail="Cannot find location")
     usr = db.users.insert_one({
         "username": username,
@@ -88,6 +88,8 @@ def updateUser(
         })
     if usr:
         if username:
+            if db.users.find_one({"username": username}):
+                raise HTTPException(status_code=400, detail="Username already exsits")
             updated = db.users.update_one({"_id": ObjectId(id)}, 
             {"$set":
                 {"username": username}
@@ -99,7 +101,7 @@ def updateUser(
             })
         if postal_code:
             location = geolocator.geocode({"country":"Singapore","postalcode":postal_code})
-            if not location:
+            if not location or location.address=="Singapore":
                 raise HTTPException(status_code=400, detail="Cannot find location")
             updated = db.users.update_one({"_id": ObjectId(id)}, 
             {"$set":
@@ -124,6 +126,8 @@ def deleteUser(
 ):
     status = db.users.delete_one({"_id":ObjectId(id)})
     if status.deleted_count == 1:
+        db.items.delete_many({"user_id":id})
+        db.items.update_many({"accepted":id},{"$set":{"accepted":""}})
         return {"status": "success", "message": "delete success"}
     else:
         raise HTTPException(status_code=400, detail="delete fail")
